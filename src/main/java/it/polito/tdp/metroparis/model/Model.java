@@ -1,5 +1,6 @@
 package it.polito.tdp.metroparis.model;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,19 +17,31 @@ import it.polito.tdp.metroparis.db.MetroDAO;
 
 public class Model {
 	
+	private List<Fermata> fermate;
+	Map<Integer,Fermata> fermateIdMap;
+	
 	private Graph<Fermata,DefaultEdge> grafo;
+	
+	public List<Fermata> getFermate() {
+		
+		if(this.fermate==null) {
+			MetroDAO dao = new MetroDAO();
+			this.fermate = dao.getAllFermate();
+			
+			this.fermateIdMap = new HashMap<Integer,Fermata>();
+			for(Fermata f : this.fermate)
+				this.fermateIdMap.put(f.getIdFermata(), f);
+		}
+		return this.fermate;
+	}
 	
 	public void creaGrafo() {
 		this.grafo = new SimpleDirectedGraph<Fermata,DefaultEdge>(DefaultEdge.class);
+														 //Programmazione DIFENSIVA:
+		Graphs.addAllVertices(this.grafo, getFermate()); //così se nessuno ha chiamato quel metodo lo faccio ora
+//		Graphs.addAllVertices(this.grafo, fermate);      // se fossi sicuro userei questo
 		
 		MetroDAO dao = new MetroDAO();
-		
-		List<Fermata> fermate = dao.getAllFermate();
-		Map<Integer,Fermata> fermateIdMap = new HashMap<Integer,Fermata>();
-		for(Fermata f : fermate)
-			fermateIdMap.put(f.getIdFermata(), f);
-		
-		Graphs.addAllVertices(this.grafo, fermate);
 		
 		/*
 		//METODO 1: itero su ogni coppia di vertici (380000 query anche se semplici!!!!  619*619) n^2 query
@@ -96,20 +109,52 @@ public class Model {
 			this.grafo.addEdge(fermateIdMap.get(coppia.getIdPartenza()), fermateIdMap.get(coppia.getIdArrivo()));
 		}
 		
-		System.out.println(this.grafo);
-		System.out.println("Vertici = " + this.grafo.vertexSet().size());
-		System.out.println("Archi = " +this.grafo.edgeSet().size());
-		
-		visitaGrafo(fermate.get(0));
+//		System.out.println(this.grafo);
+//		System.out.println("Vertici = " + this.grafo.vertexSet().size());
+//		System.out.println("Archi = " +this.grafo.edgeSet().size());
 	} 
 	
-	public void visitaGrafo(Fermata partenza) {
-		GraphIterator<Fermata, DefaultEdge> visita = new DepthFirstIterator<>(this.grafo,partenza); //restituisce iteratore
-		//                                           new BreadthFirstIterator<>(this.grafo,partenza);
+	public List<Fermata> calcolaPercorso(Fermata partenza, Fermata arrivo) {
+		creaGrafo();
+		Map<Fermata,Fermata> alberoInverso = visitaGrafo(partenza);
+		
+		Fermata corrente = arrivo;
+		List<Fermata> percorso = new ArrayList<Fermata>();
+		
+		while(corrente != null) {
+			percorso.add(0,corrente);
+			corrente = alberoInverso.get(corrente);
+			// corrente = getParent(corrent) e mi evitavo il listener. è un metodo dell'iteratore
+		}
+		
+		return percorso;
+		
+	}
+	
+	public Map<Fermata,Fermata> visitaGrafo(Fermata partenza) {
+		GraphIterator<Fermata, DefaultEdge> visita = new BreadthFirstIterator<>(this.grafo,partenza); //restituisce iteratore
+		//                                           new DepthFirstIterator<>(this.grafo,partenza);
+		
+		Map<Fermata,Fermata> alberoInverso = new HashMap<>();
+		alberoInverso.put(partenza, null);
+		
+		visita.addTraversalListener(new RegistraAlberoDiVisita(alberoInverso, this.grafo));
+		
 		while(visita.hasNext()) {
 			Fermata f = visita.next();
-			System.out.println(f);
+//			System.out.println(f);
 		}
+		
+		return alberoInverso;
+		
+		// Ricostruiamo il percorso a partire dall'albero inverso (pseudo-code)
+//		List<Fermata> percorso = new ArrayList<Fermata>();
+//		fermata arrivo;
+//		while(fermata!=null) {
+//			fermata = alberoInverso.get(fermata);
+//			percorso.add(fermata);
+//		}
+		
 	}
 
 }
